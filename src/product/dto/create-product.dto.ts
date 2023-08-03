@@ -51,4 +51,9 @@ export class CreateProductDto {
   @IsArray({ message: 'El tag debe ser un arreglo' })
   @IsOptional({ message: 'El tag es opcional' })
   tags?: string[];
+
+  @IsString({ each: true, message: 'Las imagenes debe ser un texto' })
+  @IsArray({ message: 'Las imagenes debe ser un arreglo' })
+  @IsOptional({ message: 'Las imagenes es opcional' })
+  images?: string[];
 }

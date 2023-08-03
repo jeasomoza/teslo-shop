@@ -30,16 +30,24 @@ export class ProductController {
 
   @Get(':id')
   findOne(@Param('id') term: string) {
-    return this.productService.findOne(term);
+    return this.productService.findOnePlaint(term);
   }
 
   @Patch(':id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() updateProductDto: UpdateProductDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateProductDto: UpdateProductDto,
+  ) {
     return this.productService.update(id, updateProductDto);
   }
 
   @Delete(':id')
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.productService.remove(id);
+  }
+
+  @Delete('/all')
+  removeAllProduct() {
+    return this.productService.removeAllProduct();
   }
 }

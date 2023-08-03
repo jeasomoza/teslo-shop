@@ -6,11 +6,11 @@ import {
 } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { Product } from './entities/product.entity';
-import { FindOneOptions, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { validate as isUUID } from 'uuid';
+import { ProductImage, Product } from './entities';
 
 @Injectable()
 export class ProductService {
@@ -19,12 +19,24 @@ export class ProductService {
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+
+    @InjectRepository(ProductImage)
+    private readonly productImageRepository: Repository<ProductImage>,
+
+    private readonly dataSource: DataSource,
   ) {}
   async create(createProductDto: CreateProductDto) {
     try {
-      const newProduct = await this.productRepository.create(createProductDto);
+      const { images = [], ...productDetail } = createProductDto;
+
+      const newProduct = await this.productRepository.create({
+        ...productDetail,
+        images: images.map((image) =>
+          this.productImageRepository.create({ url: image }),
+        ),
+      });
       await this.productRepository.save(newProduct);
-      return newProduct;
+      return { ...newProduct, images: images };
     } catch (error) {
       this.handleDBException(error);
     }
@@ -37,9 +49,12 @@ export class ProductService {
       const products = await this.productRepository.find({
         take: limit,
         skip: offset,
-        // TODO: Agregar relaciones
+        relations: ['images'],
       });
-      return products;
+      return products.map((product) => ({
+        ...product,
+        images: product.images.map((image) => image.url),
+      }));
     } catch (error) {
       this.handleDBException(error);
     }
@@ -56,6 +71,7 @@ export class ProductService {
           term: `%${term.toUpperCase}%`,
           slug: term.toLowerCase(),
         })
+        .leftJoinAndSelect('product.images', 'image')
         .getOne();
     }
 
@@ -67,10 +83,17 @@ export class ProductService {
     return product;
   }
 
+  async findOnePlaint(term: string) {
+    const { images = [], ...product } = await this.findOne(term);
+    return { ...product, images: images.map((image) => image.url) };
+  }
+
   async update(id: string, updateProductDto: UpdateProductDto) {
+    const { images = [], ...productDetail } = updateProductDto;
+
     const product = await this.productRepository.preload({
-      id: id,
-      ...updateProductDto,
+      id,
+      ...productDetail,
     });
 
     if (!product)
@@ -78,17 +101,46 @@ export class ProductService {
         `El producto con id #${id} No fue encontrado`,
       );
 
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
     try {
-      return await this.productRepository.save(product);
+      if (images.length > 0) {
+        await queryRunner.manager.delete(ProductImage, { product: { id } });
+        await queryRunner.manager.save(
+          images.map((image) =>
+            this.productImageRepository.create({ url: image, product }),
+          ),
+        );
+      } else {
+        await queryRunner.manager.delete(ProductImage, { product: { id } });
+      }
+      await this.productRepository.save(product);
+      await queryRunner.commitTransaction();
+      await queryRunner.release();
+
+      return this.findOnePlaint(id);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      await queryRunner.release();
+      this.handleDBException(error);
+    }
+  }
+
+  async removeAllProduct() {
+    const query = this.productRepository.createQueryBuilder('product');
+    try {
+      await query.delete().where({}).execute();
     } catch (error) {
       this.handleDBException(error);
     }
+    return { message: 'Todos los productos fueron eliminados' };
   }
 
   async remove(id: string) {
     const product = await this.findOne(id);
     await this.productRepository.remove(product);
-    return product;
+    return { message: `El producto con id #${id} fue eliminado` };
   }
 
   private handleDBException(error: any) {
