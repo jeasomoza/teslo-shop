@@ -46,4 +46,9 @@ export class CreateProductDto {
     message: 'El género debe ser hombre, mujer, niño, niña o unisex',
   })
   gender: string;
+
+  @IsString({ each: true, message: 'El tag debe ser un texto' })
+  @IsArray({ message: 'El tag debe ser un arreglo' })
+  @IsOptional({ message: 'El tag es opcional' })
+  tags?: string[];
 }

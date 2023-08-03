@@ -9,6 +9,8 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
 import { FindOneOptions, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
+import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { validate as isUUID } from 'uuid';
 
 @Injectable()
 export class ProductService {
@@ -28,27 +30,59 @@ export class ProductService {
     }
   }
 
-  async findAll() {
+  async findAll(paginationDto: PaginationDto) {
     try {
-      const products = await this.productRepository.find();
+      const { limit = 10, offset = 0 } = paginationDto;
+
+      const products = await this.productRepository.find({
+        take: limit,
+        skip: offset,
+        // TODO: Agregar relaciones
+      });
       return products;
     } catch (error) {
       this.handleDBException(error);
     }
   }
 
-  async findOne(id: string) {
-    const product = await this.productRepository.findOneBy({ id });
+  async findOne(term: string) {
+    let product: Product;
+    if (isUUID(term)) {
+      product = await this.productRepository.findOneBy({ id: term });
+    } else {
+      const queryBuilder = this.productRepository.createQueryBuilder('product');
+      product = await queryBuilder
+        .where('UPPER(title) ILIKE :term or slug=:slug', {
+          term: `%${term.toUpperCase}%`,
+          slug: term.toLowerCase(),
+        })
+        .getOne();
+    }
+
     if (!product) {
       throw new NotFoundException(
-        `El producto con id #${id} No fue encontrado`,
+        `El producto con term #${term} No fue encontrado`,
       );
     }
     return product;
   }
 
-  async update(id: number, updateProductDto: UpdateProductDto) {
-    return `This action updates a #${id} product`;
+  async update(id: string, updateProductDto: UpdateProductDto) {
+    const product = await this.productRepository.preload({
+      id: id,
+      ...updateProductDto,
+    });
+
+    if (!product)
+      throw new NotFoundException(
+        `El producto con id #${id} No fue encontrado`,
+      );
+
+    try {
+      return await this.productRepository.save(product);
+    } catch (error) {
+      this.handleDBException(error);
+    }
   }
 
   async remove(id: string) {
