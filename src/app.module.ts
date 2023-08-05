@@ -4,6 +4,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProductModule } from './product/product.module';
 import { CommonModule } from './common/common.module';
 import { SeddModule } from './seed/seed.module';
+import { FilesModule } from './files/files.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -18,9 +20,12 @@ import { SeddModule } from './seed/seed.module';
       autoLoadEntities: true,
       synchronize: true,
     }),
+
     ProductModule,
     CommonModule,
     SeddModule,
+    FilesModule,
+    AuthModule,
   ],
 })
 export class AppModule {}
